@@ -191,11 +191,12 @@ export default {
         },
         async joinPlayer(gameId) {
             await setDoc(doc(db, "games", gameId, "players", this.currentUser.uid), {
+                avatar: '👤',
                 email: this.currentUser.email,
                 name: this.currentUser.displayName,
                 joinedAt: serverTimestamp(),
                 ready: false,
-                score: 0,
+                score: 0
             });
         },
         async joinGameByCode() {

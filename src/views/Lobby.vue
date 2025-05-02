@@ -6,6 +6,7 @@ import AnimateHeight from 'vue-animate-height';
 import { db } from '../firebase/init.js';
 import { doc, setDoc, getDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { notify } from '@kyvg/vue3-notification';
+import emojis from '../assets/emojis.js';
 
 const baseUrl = import.meta.env.VITE_BASE_URL || 'https://emparejados.com.ar';
 </script>
@@ -33,7 +34,9 @@ const baseUrl = import.meta.env.VITE_BASE_URL || 'https://emparejados.com.ar';
                     <vue-qrcode class="game-qr" :value="`${baseUrl}/lobby/${gameId}`" />
                 </AnimateHeight>
 
-                <h3 class="medium-bottom-margin">Jugadores en la sala ({{ gamePlayers.length }})</h3>
+                <h3 class="small-bottom-margin large-top-margin">Jugadores en la sala</h3>
+                <p class="small-top-margin">{{ gamePlayers.length }} en total, <span class="success-text">{{
+                        readyPlayers.length }} puede(n) empezar</span>.</p>
                 <p v-if="!hasHost && gamePlayers.length > 0" class="alert-text bold small-top-margin">
                     El creador de la partida no está presente.
                 </p>
@@ -43,7 +46,12 @@ const baseUrl = import.meta.env.VITE_BASE_URL || 'https://emparejados.com.ar';
                     <div class="listed-player flex left y-centered"
                         :class="{ 'host': player.email === gameData?.host, 'you': currentUser.email === player.email }"
                         v-for="(player, index) in gamePlayers" :key="index">
-                        <span class="listed-player-avatar large-right-margin">🧙‍♂️</span>
+                        <span v-if="currentUser.email !== player.email"
+                            class="listed-player-avatar large-right-margin">{{ player.avatar }}</span>
+                        <select v-if="currentUser.email === player.email" v-model="player.avatar"
+                            @change="updateAvatar(player.id, player.avatar)" class="avatar-select large-right-margin">
+                            <option v-for="emoji in emojis" :key="emoji" :value="emoji">{{ emoji }}</option>
+                        </select>
                         <div class="flex vertical left">
                             <div class="flex">
                                 <span class="listed-player-name">{{ player.name }}</span>
@@ -55,7 +63,7 @@ const baseUrl = import.meta.env.VITE_BASE_URL || 'https://emparejados.com.ar';
                                 </span>
                             </div>
                             <span class="listed-player-status" :class="{ 'success-text': player.ready }">{{ player.ready
-                                ? 'Listo/a' : 'Preparándose' }}</span>
+                                ? '✅️ Listo/a' : '⏳ Preparándose' }}</span>
                         </div>
 
                         <button class="kick-button bold tall" v-if="isHost && player.email !== currentUser.email"
@@ -74,12 +82,13 @@ const baseUrl = import.meta.env.VITE_BASE_URL || 'https://emparejados.com.ar';
                 </div>
 
                 <p v-if="!isHost" class="bold small-bottom-margin">⚠️ Esperando el inicio de la partida.</p>
-                <button v-if="isHost" class="container-button main-button medium-top-margin" @click="startGame">Iniciar
+                <button v-if="isHost" class="start-button container-button main-button medium-top-margin"
+                    :class="{ 'disabled': gamePlayers.length > readyPlayers.length }" @click="startGame">Iniciar
                     partida</button>
             </div>
         </div>
 
-        <button class="container-button main-button medium-top-margin">
+        <button class="container-button main-button medium-top-margin large-bottom-margin">
             <router-link to="/" class="block">Volver al menú</router-link>
         </button>
     </TransitionGroup>
@@ -100,6 +109,9 @@ export default {
     computed: {
         gamePlayers() {
             return store.getters.players;
+        },
+        readyPlayers() {
+            return this.gamePlayers.filter(player => player.ready);
         },
         hasHost() {
             return this.gamePlayers.some(player => player.email === this.gameData?.host);
@@ -137,6 +149,18 @@ export default {
                 await deleteDoc(playerRef);
             } catch (error) {
                 console.error("Error al eliminar jugador:", error);
+            }
+        },
+        async updateAvatar(playerId, avatar) {
+            const playerRef = doc(db, "games", this.gameId, "players", playerId);
+            try {
+                await setDoc(playerRef, { avatar }, { merge: true });
+            } catch (error) {
+                notify({
+                    title: "Error del avatar",
+                    text: "No se pudo actualizar el avatar: " + error.message,
+                    type: "error",
+                });
             }
         },
         async toggleReady() {
@@ -183,7 +207,7 @@ export default {
             if (!stillInLobby) {
                 notify({
                     title: "Estado de partida",
-                    text: "Fuiste removido de la sala por el host.",
+                    text: "Fuiste removido de la sala por el host o porque se cerró.",
                     type: "warning",
                 });
                 router.push("/");
@@ -245,8 +269,18 @@ export default {
     color: #42b883;
 }
 
-.listed-player-avatar {
+.listed-player-avatar,
+.avatar-select {
     font-size: 40px;
+    width: 80px;
+    height: 60px;
+}
+
+.avatar-select {
+    border-radius: 4px;
+    background-color: transparent;
+    border: none;
+    padding: 0;
 }
 
 .listed-player-status {
@@ -279,5 +313,11 @@ export default {
     border: none;
     cursor: pointer;
     background: transparent;
+}
+
+.start-button.disabled {
+    background-color: #aea2a2;
+    cursor: not-allowed;
+    pointer-events: none;
 }
 </style>
