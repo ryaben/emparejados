@@ -62,8 +62,11 @@ const baseUrl = import.meta.env.VITE_BASE_URL || 'https://emparejados.com.ar';
                                     class="listed-player-isyou bold small-left-margin">Vos
                                 </span>
                             </div>
-                            <span class="listed-player-status" :class="{ 'success-text': player.ready }">{{ player.ready
-                                ? '✅️ Listo/a' : '⏳ Preparándose' }}</span>
+                            <Transition name="fade" mode="out-in" appear>
+                                <span class="listed-player-status" :class="{ 'success-text': player.ready }" :key="player.ready">
+                                    {{ player.ready ? '✅️ Listo/a' : '⏳ Preparándose' }}
+                                </span>
+                            </Transition>
                         </div>
 
                         <button class="kick-button bold tall" v-if="isHost && player.email !== currentUser.email"

@@ -5,6 +5,7 @@ import store from '../store';
 import Home from "/src/views/Home.vue";
 import Lobby from "/src/views/Lobby.vue";
 import MainGame from "/src/views/MainGame.vue";
+import CardCreator from "../views/CardCreator.vue";
 
 //Rutas
 const routes = [
@@ -23,6 +24,11 @@ const routes = [
     path: "/game",
     name: "MainGame",
     component: MainGame
+  },
+  {
+    path: "/creator",
+    name: "CardCreator",
+    component: CardCreator
   },
 ];
 

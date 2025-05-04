@@ -31,17 +31,17 @@ import { notify } from "@kyvg/vue3-notification";
 
                 <div class="grid card-options">
                     <div class="flex vertical y-centered">
-                        <span class="gold-text">Difíciles</span>
+                        <span class="gold-text bold">Difíciles</span>
                         <input class="main-input cards-input" type="number" v-model="newGame.cardsPerPlayer.hard"
                             required />
                     </div>
                     <div class="flex vertical y-centered">
-                        <span class="silver-text">Medias</span>
+                        <span class="silver-text bold">Medias</span>
                         <input class="main-input cards-input" type="number" v-model="newGame.cardsPerPlayer.normal"
                             required />
                     </div>
                     <div class="flex vertical y-centered">
-                        <span class="bronze-text">Fáciles</span>
+                        <span class="bronze-text bold">Fáciles</span>
                         <input class="main-input cards-input" type="number" v-model="newGame.cardsPerPlayer.easy"
                             required />
                     </div>
