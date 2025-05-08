@@ -25,6 +25,8 @@ import { notify } from "@kyvg/vue3-notification";
                 <h3 class="grid-full-row">Opciones</h3>
                 <label class="grid-label bold" for="newGameCode">Código de partida</label>
                 <input class="main-input" id="newGameCode" type="text" v-model="newGame.code" required />
+                <label class="grid-label bold" for="newGameTime">Tiempo de juego</label>
+                <input class="main-input" id="newGameTime" type="number" v-model="newGame.gameTime" required />
                 <label class="grid-label bold" for="newGameMaxPlayers">Máximo de jugadores</label>
                 <input class="main-input" id="newGameMaxPlayers" type="number" v-model="newGame.maxPlayers" required />
                 <label class="grid-label bold flex y-centered" for="newGameCardsPerPlayer">Tarjetas por jugador</label>
@@ -64,6 +66,7 @@ import { notify } from "@kyvg/vue3-notification";
                 Código de partida:
                 <input class="main-input" type="text" v-model="joinGame.code" />
             </label>
+            <img v-if="joiningGame" width="32" src="/img/loading.gif" alt="Loading..." style="background: transparent;" />
             <button class="container-button main-button" @click="joinGameByCode">Unirse a la sala</button>
             <button class="container-button main-button" @click="showContainer('')">Volver</button>
         </div>
@@ -113,7 +116,8 @@ export default {
                     normal: 2,
                     hard: 1
                 },
-                hintsEnabled: false
+                hintsEnabled: false,
+                gameTime: 15
             },
             joinGame: {
                 code: ''
@@ -128,7 +132,8 @@ export default {
                 'auth/invalid-email': 'El email ingresado no es válido, usá arroba y dominio.',
                 'auth/user-not-found': 'No se encontró una cuenta registrada con ese email.',
                 'auth/wrong-password': 'La contraseña ingresada es incorrecta, probá de nuevo o reseteala.'
-            }
+            },
+            joiningGame: false,
         };
     },
     computed: {
@@ -174,6 +179,7 @@ export default {
                     hintsEnabled: this.newGame.hintsEnabled,
                     createdAt: serverTimestamp(),
                     status: 'waiting',
+                    timeLeft: this.newGame.gameTime,
                     host: this.currentUser.email,
                 });
 
@@ -196,7 +202,8 @@ export default {
                 name: this.currentUser.displayName,
                 joinedAt: serverTimestamp(),
                 ready: false,
-                score: 0
+                score: 0,
+                assignedCards: []
             });
         },
         async joinGameByCode() {
@@ -208,11 +215,13 @@ export default {
                 });
             }
 
+            this.joiningGame = true;
             const gamesRef = collection(db, "games");
             const q = query(gamesRef, where("gameCode", "==", this.joinGame.code));
             const querySnapshot = await getDocs(q);
 
             if (querySnapshot.empty) {
+                this.joiningGame = false;
                 return notify({
                     title: "Error al unirse",
                     text: "No se encontró una partida con ese código.",
@@ -224,6 +233,7 @@ export default {
             const gameId = gameDoc.id;
 
             if (gameDoc.data().status !== 'waiting') {
+                this.joiningGame = false;
                 return notify({
                     title: "Error al unirse",
                     text: "La partida ya empezó o ya fue jugada.",
@@ -234,6 +244,7 @@ export default {
                 const playersSnapshot = await getDocs(playersRef);
 
                 if (gameDoc.data().maxPlayers <= playersSnapshot.size) {
+                    this.joiningGame = false;
                     return notify({
                         title: "Error al unirse",
                         text: "La sala ya está llena hasta el máximo permitido.",

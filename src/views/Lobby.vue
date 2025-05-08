@@ -4,7 +4,7 @@ import store from '../store';
 import VueQrcode from 'vue-qrcode';
 import AnimateHeight from 'vue-animate-height';
 import { db } from '../firebase/init.js';
-import { doc, setDoc, getDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, getDoc, deleteDoc, serverTimestamp, updateDoc } from "firebase/firestore";
 import { notify } from '@kyvg/vue3-notification';
 import emojis from '../assets/emojis.js';
 
@@ -36,7 +36,7 @@ const baseUrl = import.meta.env.VITE_BASE_URL || 'https://emparejados.com.ar';
 
                 <h3 class="small-bottom-margin large-top-margin">Jugadores en la sala</h3>
                 <p class="small-top-margin">{{ gamePlayers.length }} en total, <span class="success-text">{{
-                        readyPlayers.length }} puede(n) empezar</span>.</p>
+                    readyPlayers.length }} puede(n) empezar</span>.</p>
                 <p v-if="!hasHost && gamePlayers.length > 0" class="alert-text bold small-top-margin">
                     El creador de la partida no está presente.
                 </p>
@@ -63,7 +63,8 @@ const baseUrl = import.meta.env.VITE_BASE_URL || 'https://emparejados.com.ar';
                                 </span>
                             </div>
                             <Transition name="fade" mode="out-in" appear>
-                                <span class="listed-player-status" :class="{ 'success-text': player.ready }" :key="player.ready">
+                                <span class="listed-player-status" :class="{ 'success-text': player.ready }"
+                                    :key="player.ready">
                                     {{ player.ready ? '✅️ Listo/a' : '⏳ Preparándose' }}
                                 </span>
                             </Transition>
@@ -106,7 +107,8 @@ export default {
     },
     data() {
         return {
-            qrHeight: 0
+            qrHeight: 0,
+            isTransitioningToGame: false
         };
     },
     computed: {
@@ -143,6 +145,7 @@ export default {
                     joinedAt: serverTimestamp(),
                     ready: false,
                     score: 0,
+                    assignedCards: []
                 });
             }
         },
@@ -194,6 +197,25 @@ export default {
             } catch (error) {
                 console.error("Error al cambiar el estado de listo:", error);
             }
+        },
+        async startGame() {
+            try {
+                await store.dispatch('distributeCardsToPlayers');
+                await store.dispatch('getAssignedCards', {
+                    gameId: this.gameId,
+                    playerId: this.currentUser.uid,
+                });
+
+                const gameRef = doc(db, "games", this.gameId);
+                await updateDoc(gameRef, { status: 'playing' });
+
+            } catch (error) {
+                return notify({
+                    title: "Error al iniciar la partida",
+                    text: "No se pudo iniciar la partida: " + error.message,
+                    type: "error",
+                });
+            }
         }
     },
     watch: {
@@ -205,9 +227,20 @@ export default {
                 }
             }
         },
+        gameData(newGame) {
+            if (newGame?.status === 'playing') {
+                store.dispatch('stopLobbyListeners', {
+                    shouldRemovePlayer: false,
+                    shouldResetLobby: false
+                });
+                router.push({ name: 'MainGame', params: { gameId: this.gameId } });
+            }
+        },
         gamePlayers(players) {
+            if (!this.gameData || this.gameData.status !== 'waiting') return;
+
             const stillInLobby = players.some(p => p.email === this.currentUser.email);
-            if (!stillInLobby) {
+            if (!stillInLobby && this.gameData?.status === "waiting") {
                 notify({
                     title: "Estado de partida",
                     text: "Fuiste removido de la sala por el host o porque se cerró.",
@@ -219,10 +252,20 @@ export default {
     },
     async created() {
         await this.addPlayerToGame(this.gameId, this.currentUser);
+        if (this.isHost) {
+            await store.dispatch('getCards');
+        }
     },
     beforeUnmount() {
-        store.dispatch("stopLobbyListeners");
+        const isTransitioningToGame = this.gameData?.status === 'playing';
+
+        store.dispatch("stopLobbyListeners", {
+            shouldRemovePlayer: !isTransitioningToGame,
+            shouldResetLobby: !isTransitioningToGame
+        });
     }
+
+
 };
 </script>
 

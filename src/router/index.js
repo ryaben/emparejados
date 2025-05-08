@@ -21,9 +21,10 @@ const routes = [
     props: true
   },
   {
-    path: "/game",
+    path: "/game/:gameId",
     name: "MainGame",
-    component: MainGame
+    component: MainGame,
+    props: true
   },
   {
     path: "/creator",

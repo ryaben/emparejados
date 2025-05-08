@@ -53,7 +53,11 @@ import { notify } from '@kyvg/vue3-notification';
                     </select>
                 </div>
             </div>
-            <button type="submit">Crear tarjeta</button>
+            <div class="flex vertical y-centered">
+                <img class="medium-bottom-margin" v-if="uploadingCard" width="32" src="/img/loading.gif" alt="Loading..."
+                    style="background: transparent;" />
+                <button type="submit">Crear tarjeta</button>
+            </div>
         </form>
     </div>
 </template>
@@ -71,7 +75,8 @@ export default {
                     { cardCode: "", content: "", contentType: "text" },
                     { cardCode: "", content: "", contentType: "text" },
                 ]
-            }
+            },
+            uploadingCard: false,
         };
     },
     methods: {
@@ -80,24 +85,47 @@ export default {
 
             try {
                 const fileTypes = { image: ".jpg", audio: ".mp3" };
+
+                let optionsProcessed = 0;
+
                 for (const [index, card] of [this.cardData.options[0], this.cardData.options[1]].entries()) {
                     if (fileTypes[card.contentType]) {
+                        // Manejo con archivo
+                        that.uploadingCard = true;
                         await this.uploadCardFile(card.cardCode, card.contentType, index, fileTypes[card.contentType], async function (fileName) {
                             await that.generateFileReference(fileName, card.contentType, fileTypes[card.contentType], async function (url) {
                                 that.cardData.options[index].content = url;
-                                await addDoc(collection(db, "cards"), that.cardData);
-                                that.resetForm();
-                                return notify({
-                                    title: 'Tarjeta creada',
-                                    text: 'La tarjeta ha sido creada exitosamente.',
-                                    type: 'success'
-                                });
+                                optionsProcessed++;
+                                if (optionsProcessed === 2) {
+                                    await addDoc(collection(db, "cards"), that.cardData);
+                                    that.resetForm();
+                                    notify({
+                                        title: 'Tarjeta creada',
+                                        text: 'La tarjeta ha sido creada exitosamente.',
+                                        type: 'success'
+                                    });
+                                    that.uploadingCard = false;
+                                }
                             });
                         });
+                    } else if (card.contentType === 'text' && card.content) {
+                        // Manejo de contenido de texto
+                        optionsProcessed++;
+                        if (optionsProcessed === 2) {
+                            this.uploadingCard = true;
+                            await addDoc(collection(db, "cards"), that.cardData);
+                            that.resetForm();
+                            notify({
+                                title: 'Tarjeta creada',
+                                text: 'La tarjeta ha sido creada exitosamente.',
+                                type: 'success'
+                            });
+                            this.uploadingCard = false;
+                        }
                     }
                 }
             } catch (error) {
-                console.log(error)
+                console.log(error);
                 return notify({
                     title: 'Error al crear tarjeta',
                     text: 'Hubo un error al crear la tarjeta. Por favor, inténtalo de nuevo.',
@@ -105,6 +133,7 @@ export default {
                 });
             }
         },
+
         async uploadCardFile(fileName, folder, cardNumber, fileExtension, callback) {
             const storage = getStorage();
             const storageRef = ref(storage, 'cards/' + folder + '/' + fileName + fileExtension);
@@ -137,8 +166,8 @@ export default {
             this.cardData.category = "";
             this.cardData.difficulty = "easy";
             this.cardData.hint = "";
-            this.cardData.options[0] = { code: "", content: "", type: "text" };
-            this.cardData.options[1] = { code: "", content: "", type: "text" };
+            this.cardData.options[0] = { cardCode: "", content: "", contentType: "text" };
+            this.cardData.options[1] = { cardCode: "", content: "", contentType: "text" };
         }
     }
 };
@@ -165,7 +194,7 @@ export default {
 }
 
 .card-creator form div {
-    margin-bottom: 15px;
+    margin-bottom: 10px;
     text-align: left;
 }
 
