@@ -6,26 +6,51 @@ import { Carousel, Slide, Pagination, Navigation } from 'vue3-carousel';
 
 <template>
     <TransitionGroup name="fade" mode="out-in" appear>
-        <Carousel v-if="cardsList.length" v-bind="carouselConfig" ref="cardsCarousel" class="wide">
-            <Slide class="medium-left-margin medium-right-margin" v-for="card in cardsList.filter(c => c.isVisible)" :key="card.id">
-                <div class="carousel__item flex vertical space-between wide tall">
-                    <h3 class="card-category small-top-margin large-bottom-margin">{{ card.category }}</h3>
-                    <p class="card-text" v-if="card.contentType === 'text'">{{ card.content }}</p>
-                    <img class="card-image wide tall" v-if="card.contentType === 'image'" width="256"
-                        :src="card.content" alt="Card Image" />
-                    <p class="card-code large-top-margin small-bottom-margin">Código: <span class="bold">{{
-                        card.cardCode }}</span></p>
-                </div>
-            </Slide>
+        <div v-if="cardsList.length" class="flex vertical y-centered wide">
+            <p class="matched-cards large-bottom-margin">Tarjetas emparejadas: <span class="bold">{{
+                    successfullyPairedCards }}/{{ totalCards }}</span></p>
+            <Carousel v-bind="carouselConfig" ref="cardsCarousel" class="wide large-top-margin large-bottom-margin">
+                <Slide class="medium-left-margin medium-right-margin" v-for="card in cardsList.filter(c => c.isVisible)"
+                    :key="card.id" :class="{ 'paired': card.successfullyPaired }">
+                    <div class="carousel__item flex vertical space-between wide tall">
+                        <h3 class="card-category small-top-margin large-bottom-margin">{{ card.category }}</h3>
+                        <p class="card-text" v-if="card.contentType === 'text'">{{ card.content }}</p>
+                        <img class="card-image wide tall" v-if="card.contentType === 'image'" width="256"
+                            :src="card.content" alt="Card Image" />
+                        <p class="card-code large-top-margin small-bottom-margin">Código: <span class="bold">{{
+                            card.cardCode }}</span></p>
+                    </div>
+                </Slide>
 
-            <template #addons>
-                <Navigation />
-            </template>
-        </Carousel>
+                <template #addons>
+                    <Navigation />
+                </template>
+            </Carousel>
 
-        <div v-else class="loading flex vertical y-centered wide large-bottom-margin">
+            <div class="flex vertical y-centered wide">
+                <h3>Ofrecer emparejamiento</h3>
+                <label class="flex vertical y-centered">
+                    Oponente:
+                    <select class="small-top-margin" v-model="selectedOpponent" @change="offerPairing">
+                        <option v-for="opponent in gamePlayers.filter(player => player.id !== currentUser.uid)"
+                            :key="opponent.id" :value="opponent.id">
+                            {{ opponent.name }} ({{ opponent.email }})
+                        </option>
+                    </select>
+                </label>
+            </div>
+        </div>
+
+        <div v-else-if="loadingCards" class="loading flex vertical y-centered wide large-bottom-margin">
             <img width="64" src="/img/loading.gif" alt="Cargando..." style="background: transparent;" />
             <span>Cargando interfaz...</span>
+        </div>
+
+        <div v-else-if="!loadingCards && (!cardsList.length || !cardsList)">
+            <p style="font-size: 18px;">Tu usuario no forma parte de esta partida en curso.</p>
+            <button class="container-button main-button medium-top-margin large-bottom-margin">
+                <router-link to="/" class="block">Volver al menú</router-link>
+            </button>
         </div>
     </TransitionGroup>
 </template>
@@ -40,7 +65,9 @@ export default {
                 itemsToShow: 1.6,
                 wrapAround: true,
                 mouseWheel: true
-            }
+            },
+            loadingCards: true,
+            selectedOpponent: null,
         };
     },
     computed: {
@@ -52,6 +79,17 @@ export default {
         },
         gameData() {
             return store.getters.game;
+        },
+        gamePlayers() {
+            return store.getters.players;
+        },
+        totalCards() {
+            return this.gameData.cardsPerPlayer.easy +
+                this.gameData.cardsPerPlayer.normal +
+                this.gameData.cardsPerPlayer.hard;
+        },
+        successfullyPairedCards() {
+            return this.cardsList.filter(card => card.successfullyPaired).length;
         },
         isHost() {
             return this.currentUser?.email === this.gameData?.host;
@@ -69,6 +107,7 @@ export default {
                         gameId: this.gameId,
                         playerId: this.currentUser.uid,
                     });
+                    this.loadingCards = false;
                 }
             },
         },
@@ -89,6 +128,10 @@ export default {
     font-family: Arial, sans-serif;
 }
 
+.matched-cards {
+    font-size: 20px;
+}
+
 .carousel__slide {
     background-color: #52e197;
     border-radius: 10px;
@@ -104,11 +147,16 @@ export default {
     opacity: 1;
 }
 
+.carousel__slide.paired {
+    background-color: #92928e;
+    opacity: 0.5;
+}
+
 .carousel__slide .card-image {
     margin: auto;
     padding: 0 10px;
     border-radius: 10px;
-    max-height: 180px;
+    max-height: 18vh;
     max-width: 220px;
 }
 
@@ -117,7 +165,7 @@ export default {
     padding-bottom: 5px;
 }
 
-.carousel__slide--active .card-category {
+.carousel__slide--active:not(.paired) .card-category {
     border-bottom: 2px solid #d1ec1f;
 }
 
@@ -131,7 +179,7 @@ export default {
     padding-top: 5px;
 }
 
-.carousel__slide--active .card-code {
+.carousel__slide--active:not(.paired) .card-code {
     border-top: 2px solid #d1ec1f;
 }
 </style>

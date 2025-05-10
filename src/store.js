@@ -99,11 +99,13 @@ const store = createStore({
                     return;
                 }
 
-                const assignedCardIds = playerSnap.data().assignedCards || [];
+                const assignedCardObjs = playerSnap.data().assignedCards || [];
+                const assignedCardIds = assignedCardObjs.map(card => card.id);
                 const fullCardIds = assignedCardIds.flatMap(id => {
                     const baseId = id.replace(/_[01]$/, "");
                     return [`${baseId}_0`, `${baseId}_1`];
                 });
+                const pairedMap = Object.fromEntries(assignedCardObjs.map(card => [card.id, card.successfullyPaired]));
 
                 if (!fullCardIds.length) {
                     commit("setCards", []);
@@ -138,6 +140,7 @@ const store = createStore({
                                     contentType: option.contentType,
                                     cardCode: option.cardCode,
                                     isVisible: assignedSet.has(fullId),
+                                    successfullyPaired: pairedMap[fullId] ?? false,
                                     ...omit(data, 'options'),
                                 });
                             }
@@ -262,7 +265,7 @@ const store = createStore({
                 const ref = doc(db, "games", game.id, "players", player.id);
                 const shuffledCardIds = shuffle(assignments[player.id].map(card => card.id));
                 return updateDoc(ref, {
-                    assignedCards: shuffledCardIds
+                    assignedCards: shuffledCardIds.map(id => ({ id, successfullyPaired: false }))
                 });
             });
 

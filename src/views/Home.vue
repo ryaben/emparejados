@@ -2,7 +2,7 @@
 import store from '../store';
 import router from '../router/index';
 import { db, auth } from '../firebase/init.js';
-import { collection, addDoc, doc, setDoc, getDocs, serverTimestamp, query, where } from "firebase/firestore";
+import { collection, addDoc, doc, setDoc, getDoc, getDocs, serverTimestamp, query, where } from "firebase/firestore";
 import { signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, sendPasswordResetEmail, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { notify } from "@kyvg/vue3-notification";
 </script>
@@ -66,7 +66,8 @@ import { notify } from "@kyvg/vue3-notification";
                 Código de partida:
                 <input class="main-input" type="text" v-model="joinGame.code" />
             </label>
-            <img v-if="joiningGame" width="32" src="/img/loading.gif" alt="Loading..." style="background: transparent;" />
+            <img v-if="joiningGame" width="32" src="/img/loading.gif" alt="Loading..."
+                style="background: transparent;" />
             <button class="container-button main-button" @click="joinGameByCode">Unirse a la sala</button>
             <button class="container-button main-button" @click="showContainer('')">Volver</button>
         </div>
@@ -196,15 +197,21 @@ export default {
             }
         },
         async joinPlayer(gameId) {
-            await setDoc(doc(db, "games", gameId, "players", this.currentUser.uid), {
-                avatar: '👤',
-                email: this.currentUser.email,
-                name: this.currentUser.displayName,
-                joinedAt: serverTimestamp(),
-                ready: false,
-                score: 0,
-                assignedCards: []
-            });
+            const docRef = doc(db, "games", gameId, "players", this.currentUser.uid);
+            const docSnap = await getDoc(docRef);
+
+            if (!docSnap.exists()) {
+                await setDoc(doc(db, "games", gameId, "players", this.currentUser.uid), {
+                    avatar: '👤',
+                    email: this.currentUser.email,
+                    name: this.currentUser.displayName,
+                    joinedAt: serverTimestamp(),
+                    ready: false,
+                    assignedCards: [],
+                });
+            } else {
+                console.log("El jugador forma parte de la partida.");
+            }
         },
         async joinGameByCode() {
             if (this.joinGame.code === '') {
@@ -232,11 +239,11 @@ export default {
             const gameDoc = querySnapshot.docs[0];
             const gameId = gameDoc.id;
 
-            if (gameDoc.data().status !== 'waiting') {
+            if (gameDoc.data().status === 'ended') {
                 this.joiningGame = false;
                 return notify({
                     title: "Error al unirse",
-                    text: "La partida ya empezó o ya fue jugada.",
+                    text: "La partida ya concluyó.",
                     type: "error"
                 });
             } else {
