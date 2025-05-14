@@ -148,6 +148,9 @@ button {
 .wide {
   width: 100%;
 }
+.half-wide {
+  width: 50%;
+}
 
 .block {
   display: block;
@@ -175,6 +178,21 @@ button {
   height: 100%;
 }
 
+.zero-right-margin {
+  margin-right: 0;
+}
+.zero-left-margin {
+  margin-left: 0;
+}
+.zero-top-margin {
+  margin-top: 0;
+}
+.zero-bottom-margin {
+  margin-bottom: 0;
+}
+.zero-margin {
+  margin: 0;
+}
 .small-right-margin {
   margin-right: 5px;
 }
@@ -219,6 +237,12 @@ button {
 }
 .large-margin {
   margin: 20px;
+}
+
+.disabled {
+  pointer-events: none;
+  opacity: 0.8;
+  background: #92928e;
 }
 
 #app {

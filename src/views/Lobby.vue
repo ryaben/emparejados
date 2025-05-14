@@ -12,7 +12,7 @@ const baseUrl = import.meta.env.VITE_BASE_URL || 'https://emparejados.com.ar';
 </script>
 
 <template>
-    <TransitionGroup name="fade" mode="out-in" appear>
+    <TransitionGroup class="lobby-container" name="fade" mode="out-in" appear>
         <!-- Si no está loggeado -->
         <div v-if="!currentUser" class="flex vertical y-centered wide">
             <p>Inicia sesión en <span class="bold">"Gestión de cuenta"</span> para unirte a la partida!</p>

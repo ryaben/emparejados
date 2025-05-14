@@ -1,7 +1,17 @@
 import { createStore } from 'vuex';
-import { doc, collection, query, where, getDocs, getDoc, onSnapshot, deleteDoc, updateDoc } from "firebase/firestore";
+import { doc, collection, query, where, getDocs, addDoc, getDoc, onSnapshot, deleteDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { onAuthStateChanged } from 'firebase/auth';
 import { db, auth } from './firebase/init.js';
+
+// Global variables:
+const pointsPerDifficulty = {
+    easy: 1,
+    normal: 3,
+    hard: 5
+};
+const pointPenalization = 2;
+
+var unsubscribeAssignedCards = null; // Fuera del action, o en un módulo adecuado
 
 function shuffle(array) {
     for (let i = array.length - 1; i > 0; i--) {
@@ -30,9 +40,11 @@ const store = createStore({
         user: null,
         game: null,
         players: [],
+        proposals: [],
         unsubscribers: {
             game: null,
-            players: null
+            players: null,
+            proposals: null
         }
     },
     getters: {
@@ -44,6 +56,9 @@ const store = createStore({
         },
         players(state) {
             return state.players;
+        },
+        proposals(state) {
+            return state.proposals;
         },
         isLoggedIn: (state) => !!state.user,
         currentUser: (state) => state.user,
@@ -58,21 +73,27 @@ const store = createStore({
         setPlayers(state, players) {
             state.players = players;
         },
+        setProposals(state, proposals) {
+            state.proposals = proposals;
+        },
         setUser(state, user) {
             state.user = user;
         },
-        setUnsubscribers(state, { gameUnsub, playersUnsub }) {
+        setUnsubscribers(state, { gameUnsub, playersUnsub, proposalsUnsub }) {
             state.unsubscribers.game = gameUnsub;
             state.unsubscribers.players = playersUnsub;
+            state.unsubscribers.proposals = proposalsUnsub;
         },
         clearUnsubscribers(state) {
             if (state.unsubscribers.game) state.unsubscribers.game();
             if (state.unsubscribers.players) state.unsubscribers.players();
-            state.unsubscribers = { game: null, players: null };
+            if (state.unsubscribers.proposals) state.unsubscribers.proposals();
+            state.unsubscribers = { game: null, players: null, proposals: null };
         },
         resetLobby(state) {
             state.game = null;
             state.players = [];
+            state.proposals = [];
         }
     },
     actions: {
@@ -92,64 +113,65 @@ const store = createStore({
         async getAssignedCards({ commit }, { gameId, playerId }) {
             try {
                 const playerRef = doc(db, "games", gameId, "players", playerId);
-                const playerSnap = await getDoc(playerRef);
 
-                if (!playerSnap.exists()) {
-                    console.warn("Jugador no encontrado en getAssignedCards");
-                    return;
-                }
+                // Detener cualquier escucha previa
+                if (unsubscribeAssignedCards) unsubscribeAssignedCards();
 
-                const assignedCardObjs = playerSnap.data().assignedCards || [];
-                const assignedCardIds = assignedCardObjs.map(card => card.id);
-                const fullCardIds = assignedCardIds.flatMap(id => {
-                    const baseId = id.replace(/_[01]$/, "");
-                    return [`${baseId}_0`, `${baseId}_1`];
-                });
-                const pairedMap = Object.fromEntries(assignedCardObjs.map(card => [card.id, card.successfullyPaired]));
+                unsubscribeAssignedCards = onSnapshot(playerRef, async (playerSnap) => {
+                    if (!playerSnap.exists()) {
+                        console.warn("Jugador no encontrado en getAssignedCards");
+                        commit("setCards", []);
+                        return;
+                    }
 
-                if (!fullCardIds.length) {
-                    commit("setCards", []);
-                    return;
-                }
-
-                // Eliminar sufijos _0 o _1 para obtener los IDs base
-                const baseIds = [...new Set(assignedCardIds.map(id => id.replace(/_[01]$/, '')))];
-                const cardDocs = [];
-
-                // Firebase admite hasta 10 elementos en "in"
-                const chunks = (arr, size) => arr.length <= size ? [arr] :
-                    Array.from({ length: Math.ceil(arr.length / size) }, (_, i) => arr.slice(i * size, i * size + size));
-
-                const idChunks = chunks(baseIds, 10);
-                const assignedSet = new Set(assignedCardIds);
-
-                for (const chunk of idChunks) {
-                    const q = query(collection(db, "cards"), where("__name__", "in", chunk));
-                    const snapshot = await getDocs(q);
-
-                    snapshot.forEach((docSnap) => {
-                        const data = docSnap.data();
-                        if (!data.options) return;
-
-                        data.options.forEach((option, index) => {
-                            const fullId = docSnap.id + "_" + index;
-                            if (fullCardIds.includes(fullId)) {
-                                cardDocs.push({
-                                    id: fullId,
-                                    content: option.content,
-                                    contentType: option.contentType,
-                                    cardCode: option.cardCode,
-                                    isVisible: assignedSet.has(fullId),
-                                    successfullyPaired: pairedMap[fullId] ?? false,
-                                    ...omit(data, 'options'),
-                                });
-                            }
-                        });
+                    const assignedCardObjs = playerSnap.data().assignedCards || [];
+                    const assignedCardIds = assignedCardObjs.map(card => card.id);
+                    const fullCardIds = assignedCardIds.flatMap(id => {
+                        const baseId = id.replace(/_[01]$/, "");
+                        return [`${baseId}_0`, `${baseId}_1`];
                     });
-                }
+                    const pairedMap = Object.fromEntries(assignedCardObjs.map(card => [card.id, card.successfullyPaired]));
 
-                commit("setCards", cardDocs);
+                    if (!fullCardIds.length) {
+                        commit("setCards", []);
+                        return;
+                    }
 
+                    const baseIds = [...new Set(assignedCardIds.map(id => id.replace(/_[01]$/, '')))];
+                    const cardDocs = [];
+                    const chunks = (arr, size) => arr.length <= size ? [arr] :
+                        Array.from({ length: Math.ceil(arr.length / size) }, (_, i) => arr.slice(i * size, i * size + size));
+
+                    const idChunks = chunks(baseIds, 10);
+                    const assignedSet = new Set(assignedCardIds);
+
+                    for (const chunk of idChunks) {
+                        const q = query(collection(db, "cards"), where("__name__", "in", chunk));
+                        const snapshot = await getDocs(q);
+
+                        snapshot.forEach((docSnap) => {
+                            const data = docSnap.data();
+                            if (!data.options) return;
+
+                            data.options.forEach((option, index) => {
+                                const fullId = docSnap.id + "_" + index;
+                                if (fullCardIds.includes(fullId)) {
+                                    cardDocs.push({
+                                        id: fullId,
+                                        content: option.content,
+                                        contentType: option.contentType,
+                                        cardCode: option.cardCode,
+                                        isVisible: assignedSet.has(fullId),
+                                        successfullyPaired: pairedMap[fullId] ?? false,
+                                        ...omit(data, 'options'),
+                                    });
+                                }
+                            });
+                        });
+                    }
+
+                    commit("setCards", cardDocs);
+                });
             } catch (error) {
                 console.error("Error al obtener assignedCards:", error);
             }
@@ -157,6 +179,7 @@ const store = createStore({
         startLobbyListeners({ commit }, gameCode) {
             const gameRef = doc(db, "games", gameCode);
             const playersRef = collection(db, "games", gameCode, "players");
+            const proposalsRef = collection(db, "games", gameCode, "proposedMatches");
 
             // Listener del documento del juego
             const gameUnsub = onSnapshot(gameRef, (docSnap) => {
@@ -174,7 +197,16 @@ const store = createStore({
                 commit("setPlayers", players);
             });
 
-            commit("setUnsubscribers", { gameUnsub, playersUnsub });
+            // Listener de la subcolección de propuestas de emparejamiento
+            const proposalsUnsub = onSnapshot(proposalsRef, (snapshot) => {
+                const proposals = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                commit("setProposals", proposals);
+            });
+
+            commit("setUnsubscribers", { gameUnsub, playersUnsub, proposalsUnsub });
         },
         initAuth({ commit }) {
             onAuthStateChanged(auth, (user) => {
@@ -270,6 +302,114 @@ const store = createStore({
             });
 
             await Promise.all(batch);
+        },
+        async proposeCardMatch({ commit }, { gameId, playerId, rivalPlayerId, myCardId, guessedCode }) {
+            try {
+                const matchRef = collection(db, "games", gameId, "proposedMatches");
+
+                await addDoc(matchRef, {
+                    proposerId: playerId,
+                    rivalPlayerId,
+                    myCardId,
+                    guessedCode,
+                    status: "pending", // "correct" | "wrong" | "rejected"
+                    createdAt: serverTimestamp()
+                });
+            } catch (err) {
+                console.error("Error al crear la propuesta de emparejamiento:", err);
+            }
+        },
+        async respondToMatchProposal({ state }, { gameId, proposalId, accept }) {
+            try {
+                const proposalRef = doc(db, "games", gameId, "proposedMatches", proposalId);
+                const proposalSnap = await getDoc(proposalRef);
+
+                if (!proposalSnap.exists()) {
+                    return { success: false, reason: "proposal_not_found" };
+                }
+
+                const proposal = proposalSnap.data();
+
+                // Si se rechaza, solo se marca como tal
+                if (!accept) {
+                    await updateDoc(proposalRef, { status: "rejected" });
+                    return { success: true, result: "rejected" };
+                }
+
+                // Validación: buscar complementaria en cards del store
+                const allCards = state.cards;
+                const thisCard = allCards.find(card => card.cardCode === proposal.myCardId);
+                const baseId = thisCard.id.replace(/_[01]$/, "");
+                const complementId = thisCard.id.endsWith("_0") ? `${baseId}_1` : `${baseId}_0`;
+                const complementCard = allCards.find(card => card.id === complementId);
+
+                const userRefs = [
+                    doc(db, "games", gameId, "players", proposal.proposerId),
+                    doc(db, "games", gameId, "players", proposal.rivalPlayerId)
+                ];
+
+                if (!complementCard) {
+                    return { success: false, reason: "complement_not_found" };
+                }
+
+                const isCorrect = complementCard.cardCode === proposal.guessedCode;
+
+                // Actualizar status
+                await updateDoc(proposalRef, {
+                    status: isCorrect ? "correct" : "wrong"
+                });
+                if (!isCorrect) {
+                    userRefs.forEach(async (userRef) => {
+                        const userSnap = await getDoc(userRef);
+                        if (!userSnap.exists()) return;
+
+                        const currentScore = userSnap.data().score || 0;
+                        await updateDoc(userRef, {
+                            score: currentScore - pointPenalization
+                        });
+                    });
+                    return { success: true, result: "wrong" };
+                }
+
+                const thisCardDifficulty = thisCard ? thisCard.difficulty : null;
+
+                let newScore = 0;
+                switch (thisCardDifficulty) {
+                    case 'easy':
+                        newScore = pointsPerDifficulty.easy;
+                        break;
+                    case 'normal':
+                        newScore = pointsPerDifficulty.normal;
+                        break;
+                    case 'hard':
+                        newScore = pointsPerDifficulty.hard;
+                        break;
+                    default:
+                        break;
+                }
+
+                // Marcar como successfullyPaired en assignedCards del proposer y receiver
+                userRefs.forEach(async (userRef) => {
+                    const userSnap = await getDoc(userRef);
+                    if (!userSnap.exists()) return;
+
+                    const assignedCards = userSnap.data().assignedCards || [];
+                    const updatedAssignedCards = assignedCards.map(card =>
+                        card.id === thisCard.id || card.id === complementCard.id ? { ...card, successfullyPaired: true } : card
+                    );
+
+                    await updateDoc(userRef, {
+                        assignedCards: updatedAssignedCards,
+                        score: (userSnap.data().score || 0) + newScore
+                    });
+                });
+
+                return { success: true, result: "accepted" };
+
+            } catch (err) {
+                console.error("Error al responder propuesta:", err);
+                return { success: false, reason: "internal_error" };
+            }
         }
     }
 });

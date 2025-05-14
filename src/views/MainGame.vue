@@ -2,14 +2,21 @@
 import store from '../store';
 import 'vue3-carousel/carousel.css';
 import { Carousel, Slide, Pagination, Navigation } from 'vue3-carousel';
+import ProposalPopup from '../components/ProposalPopup.vue';
+import { notify } from '@kyvg/vue3-notification';
 </script>
 
 <template>
-    <TransitionGroup name="fade" mode="out-in" appear>
+    <TransitionGroup id="mainGame" name="fade" mode="out-in" appear>
         <div v-if="cardsList.length" class="flex vertical y-centered wide">
-            <p class="matched-cards large-bottom-margin">Tarjetas emparejadas: <span class="bold">{{
-                    successfullyPairedCards }}/{{ totalCards }}</span></p>
-            <Carousel v-bind="carouselConfig" ref="cardsCarousel" class="wide large-top-margin large-bottom-margin">
+            <div class="score-container flex space-evenly wide">
+                <p class="matched-cards">Tiempo<br><span class="bold game-figure">{{ gameData.timeLeft }}</span></p>
+                <p class="matched-cards large-bottom-margin">Tarjetas<br><span class="bold game-figure"><span
+                            class="success-text">{{ successfullyPairedCards.length }}</span>/{{ totalCards }}</span></p>
+                <p class="matched-cards">Puntos<br><span class="bold game-figure">{{gamePlayers.find(player =>
+                    player.id === this.currentUser.uid).score || 0 }}</span></p>
+            </div>
+            <Carousel v-bind="carouselConfig" v-model="activeCarouselIndex" class="wide large-top-margin large-bottom-margin">
                 <Slide class="medium-left-margin medium-right-margin" v-for="card in cardsList.filter(c => c.isVisible)"
                     :key="card.id" :class="{ 'paired': card.successfullyPaired }">
                     <div class="carousel__item flex vertical space-between wide tall">
@@ -27,17 +34,26 @@ import { Carousel, Slide, Pagination, Navigation } from 'vue3-carousel';
                 </template>
             </Carousel>
 
-            <div class="flex vertical y-centered wide">
+            <div class="pairing-container flex vertical y-centered wide">
                 <h3>Ofrecer emparejamiento</h3>
-                <label class="flex vertical y-centered">
-                    Oponente:
-                    <select class="small-top-margin" v-model="selectedOpponent" @change="offerPairing">
+                <label class="small-top-margin medium-bottom-margin wide">Mi tarjeta activa (<span class="bold">{{ currentCard.cardCode }}</span>)
+                    con...</label>
+                <label class="flex vertical y-centered small-top-margin medium-bottom-margin wide">
+                    Nombre de rival:
+                    <select class="main-input" v-model="selectedOpponent" :style="{ width: '75%' }">
                         <option v-for="opponent in gamePlayers.filter(player => player.id !== currentUser.uid)"
                             :key="opponent.id" :value="opponent.id">
-                            {{ opponent.name }} ({{ opponent.email }})
+                            {{ opponent.avatar }} {{ opponent.name }}
                         </option>
                     </select>
                 </label>
+                <label class="flex vertical y-centered small-top-margin large-bottom-margin wide">
+                    Código de tarjeta rival:
+                    <input type="text" class="main-input half-wide" v-model="pairingCode" />
+                </label>
+                <button class="main-button medium-top-margin"
+                    :class="{ 'disabled': currentCard?.successfullyPaired }"
+                    @click="offerPairing">Enviar</button>
             </div>
         </div>
 
@@ -52,6 +68,9 @@ import { Carousel, Slide, Pagination, Navigation } from 'vue3-carousel';
                 <router-link to="/" class="block">Volver al menú</router-link>
             </button>
         </div>
+
+        <ProposalPopup class="proposal-popup" :open="popupDisplay" @close="popupDisplay = false"
+            :proposal-data="proposalData" />
     </TransitionGroup>
 </template>
 
@@ -59,15 +78,29 @@ import { Carousel, Slide, Pagination, Navigation } from 'vue3-carousel';
 export default {
     name: 'MainGame',
     props: ['gameId'],
+    components: {
+        ProposalPopup
+    },
     data() {
         return {
+            isMounted: false,
             carouselConfig: {
-                itemsToShow: 1.6,
+                itemsToShow: 1.5,
                 wrapAround: true,
                 mouseWheel: true
             },
             loadingCards: true,
             selectedOpponent: null,
+            popupDisplay: false,
+            pairingCode: '',
+            proposalData: {
+                proposer: null,
+                proposerCard: null,
+                receiverCard: null,
+                gameId: null,
+                proposalId: null
+            },
+            activeCarouselIndex: 0
         };
     },
     computed: {
@@ -83,17 +116,57 @@ export default {
         gamePlayers() {
             return store.getters.players;
         },
+        thisPlayer() {
+            return this.gamePlayers.find(player => player.id === this.currentUser.uid);
+        },
         totalCards() {
             return this.gameData.cardsPerPlayer.easy +
                 this.gameData.cardsPerPlayer.normal +
                 this.gameData.cardsPerPlayer.hard;
         },
         successfullyPairedCards() {
-            return this.cardsList.filter(card => card.successfullyPaired).length;
+            return this.cardsList.filter(card => card.successfullyPaired);
+        },
+        currentPlayerProposals() {
+            return store.getters.proposals.filter(proposal => proposal.rivalPlayerId === this.currentUser.uid && proposal.status === 'pending');
+        },
+        currentCard() {
+            return this.cardsList.filter(c => c.isVisible)[this.activeCarouselIndex];
         },
         isHost() {
             return this.currentUser?.email === this.gameData?.host;
-        },
+        }
+    },
+    methods: {
+        async offerPairing() {
+            if (!this.selectedOpponent) return notify({
+                type: 'error',
+                title: 'Error al emparejar',
+                text: 'Debes seleccionar un oponente al cual hacerle el ofrecimiento.',
+            });
+
+            const opponent = this.gamePlayers.find(player => player.id === this.selectedOpponent);
+            if (!opponent) return notify({
+                type: 'error',
+                title: 'Error al emparejar',
+                text: 'Oponente no encontrado en la partida.',
+            });
+
+            await store.dispatch('proposeCardMatch', {
+                gameId: this.gameId,
+                playerId: this.currentUser.uid,
+                rivalPlayerId: opponent.id,
+                myCardId: this.currentCard.cardCode,
+                guessedCode: this.pairingCode,
+            });
+
+            notify({
+                type: 'warning',
+                title: 'Emparejamiento enviado',
+                text: `Has ofrecido un emparejamiento de tarjetas a ${opponent.name}!`,
+            });
+            this.pairingCode = '';
+        }
     },
     watch: {
         gameData: {
@@ -111,14 +184,28 @@ export default {
                 }
             },
         },
+        currentPlayerProposals: {
+            immediate: true,
+            handler(newVal) {
+                if (newVal.length > 0) {
+                    this.proposalData = {
+                        proposer: newVal[0].proposerId,
+                        proposerCard: newVal[0].myCardId,
+                        receiverCard: newVal[0].guessedCode,
+                        gameId: this.gameId,
+                        proposalId: newVal[0].id,
+                    }
+                    this.popupDisplay = true;
+                }
+            },
+        },
     },
     async mounted() {
+        this.isMounted = true;
         if (!this.gameData) {
             await store.dispatch('startLobbyListeners', this.gameId);
         }
     }
-
-
 };
 </script>
 
@@ -128,8 +215,19 @@ export default {
     font-family: Arial, sans-serif;
 }
 
+.score-container {
+    background: linear-gradient(to top, #242424, #168a42);
+    border-radius: 8px;
+    padding: 15px;
+    text-align: center;
+}
+
 .matched-cards {
     font-size: 20px;
+}
+
+.game-figure {
+    font-size: 30px;
 }
 
 .carousel__slide {
@@ -143,8 +241,15 @@ export default {
 .carousel__slide--active {
     background-color: #168a42;
     border: 2px outset #d1ec1f;
-    margin: 0 12px;
     opacity: 1;
+}
+
+.carousel__slide--next {
+    margin-left: 10px;
+}
+
+.carousel__slide--prev {
+    margin-right: 10px;
 }
 
 .carousel__slide.paired {
@@ -156,7 +261,7 @@ export default {
     margin: auto;
     padding: 0 10px;
     border-radius: 10px;
-    max-height: 18vh;
+    max-height: 16vh;
     max-width: 220px;
 }
 
@@ -181,5 +286,12 @@ export default {
 
 .carousel__slide--active:not(.paired) .card-code {
     border-top: 2px solid #d1ec1f;
+}
+
+.pairing-container {
+    background: linear-gradient(to bottom, #242424, #168a42);
+    border-radius: 8px;
+    padding: 15px;
+    text-align: center;
 }
 </style>

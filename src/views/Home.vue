@@ -208,6 +208,7 @@ export default {
                     joinedAt: serverTimestamp(),
                     ready: false,
                     assignedCards: [],
+                    score: 0,
                 });
             } else {
                 console.log("El jugador forma parte de la partida.");
