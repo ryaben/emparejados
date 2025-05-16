@@ -25,7 +25,7 @@ import { notify } from "@kyvg/vue3-notification";
                 <h3 class="grid-full-row">Opciones</h3>
                 <label class="grid-label bold" for="newGameCode">Código de partida</label>
                 <input class="main-input" id="newGameCode" type="text" v-model="newGame.code" required />
-                <label class="grid-label bold" for="newGameTime">Tiempo de juego</label>
+                <label class="grid-label bold" for="newGameTime">Minutos de juego</label>
                 <input class="main-input" id="newGameTime" type="number" v-model="newGame.gameTime" required />
                 <label class="grid-label bold" for="newGameMaxPlayers">Máximo de jugadores</label>
                 <input class="main-input" id="newGameMaxPlayers" type="number" v-model="newGame.maxPlayers" required />
@@ -56,6 +56,8 @@ import { notify } from "@kyvg/vue3-notification";
                 </div>
             </div>
 
+            <img v-if="creatingGame" width="32" src="/img/loading.gif" alt="Loading..."
+                style="background: transparent;" />
             <button class="container-button main-button" type="submit">Crear sala</button>
             <button class="container-button main-button" type="button" @click="showContainer('')">Volver</button>
         </form>
@@ -134,6 +136,7 @@ export default {
                 'auth/user-not-found': 'No se encontró una cuenta registrada con ese email.',
                 'auth/wrong-password': 'La contraseña ingresada es incorrecta, probá de nuevo o reseteala.'
             },
+            creatingGame: false,
             joiningGame: false,
         };
     },
@@ -169,6 +172,7 @@ export default {
         async createGame() {
             try {
                 // Paso 1: Crear un documento en la colección "games"
+                this.creatingGame = true;
                 const gameRef = await addDoc(collection(db, "games"), {
                     gameCode: this.newGame.code,
                     maxPlayers: this.newGame.maxPlayers,
@@ -180,15 +184,17 @@ export default {
                     hintsEnabled: this.newGame.hintsEnabled,
                     createdAt: serverTimestamp(),
                     status: 'waiting',
-                    timeLeft: this.newGame.gameTime,
+                    gameDuration: this.newGame.gameTime * 60,
                     host: this.currentUser.email,
                 });
 
                 // Paso 2: Crear un documento para el jugador en la subcolección "players"
                 await this.joinPlayer(gameRef.id);
+                this.creatingGame = false;
 
                 router.push({ name: 'Lobby', params: { gameId: gameRef.id } });
             } catch (error) {
+                this.creatingGame = false;
                 return notify({
                     title: "Error creando partida",
                     text: "Se devuelve el siguiente error: " + error.message,

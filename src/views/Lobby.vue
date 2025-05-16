@@ -207,7 +207,10 @@ export default {
                 });
 
                 const gameRef = doc(db, "games", this.gameId);
-                await updateDoc(gameRef, { status: 'playing' });
+                await updateDoc(gameRef, {
+                    status: 'playing',
+                    startedAt: serverTimestamp(),
+                });
 
             } catch (error) {
                 return notify({
@@ -252,7 +255,7 @@ export default {
     },
     async created() {
         await this.addPlayerToGame(this.gameId, this.currentUser);
-        if (this.isHost) {
+        if (this.isHost && this.gameData?.status === 'waiting') {
             await store.dispatch('getCards');
         }
     },
@@ -264,8 +267,6 @@ export default {
             shouldResetLobby: !isTransitioningToGame
         });
     }
-
-
 };
 </script>
 

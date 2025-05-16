@@ -10,13 +10,31 @@ import { notify } from '@kyvg/vue3-notification';
     <TransitionGroup id="mainGame" name="fade" mode="out-in" appear>
         <div v-if="cardsList.length" class="flex vertical y-centered wide">
             <div class="score-container flex space-evenly wide">
-                <p class="matched-cards">Tiempo<br><span class="bold game-figure">{{ gameData.timeLeft }}</span></p>
-                <p class="matched-cards large-bottom-margin">Tarjetas<br><span class="bold game-figure"><span
-                            class="success-text">{{ successfullyPairedCards.length }}</span>/{{ totalCards }}</span></p>
-                <p class="matched-cards">Puntos<br><span class="bold game-figure">{{gamePlayers.find(player =>
-                    player.id === this.currentUser.uid).score || 0 }}</span></p>
+                <p class="matched-cards">
+                    Tiempo<br>
+                    <Transition name="fade" mode="out-in">
+                        <span :key="gameTimeLeft" class="bold game-figure">{{
+                            gameTimeLeft }}</span>
+                    </Transition>
+                </p>
+                <p class="matched-cards large-bottom-margin">
+                    Tarjetas<br>
+                    <Transition name="fade" mode="out-in">
+                        <span :key="successfullyPairedCards.length" class="bold game-figure"><span
+                                class="success-text">{{ successfullyPairedCards.length
+                                }}</span>/{{ totalCards }}</span>
+                    </Transition>
+                </p>
+                <p class="matched-cards">
+                    Puntos<br>
+                    <Transition name="fade" mode="out-in">
+                        <span :key="thisPlayer.score" class="bold game-figure">{{
+                            thisPlayer.score || 0 }}</span>
+                    </Transition>
+                </p>
             </div>
-            <Carousel v-bind="carouselConfig" v-model="activeCarouselIndex" class="wide large-top-margin large-bottom-margin">
+            <Carousel v-bind="carouselConfig" v-model="activeCarouselIndex"
+                class="wide large-top-margin large-bottom-margin">
                 <Slide class="medium-left-margin medium-right-margin" v-for="card in cardsList.filter(c => c.isVisible)"
                     :key="card.id" :class="{ 'paired': card.successfullyPaired }">
                     <div class="carousel__item flex vertical space-between wide tall">
@@ -36,7 +54,8 @@ import { notify } from '@kyvg/vue3-notification';
 
             <div class="pairing-container flex vertical y-centered wide">
                 <h3>Ofrecer emparejamiento</h3>
-                <label class="small-top-margin medium-bottom-margin wide">Mi tarjeta activa (<span class="bold">{{ currentCard.cardCode }}</span>)
+                <label class="small-top-margin medium-bottom-margin wide">Mi tarjeta activa (<span class="bold">{{
+                    currentCard.cardCode }}</span>)
                     con...</label>
                 <label class="flex vertical y-centered small-top-margin medium-bottom-margin wide">
                     Nombre de rival:
@@ -51,8 +70,7 @@ import { notify } from '@kyvg/vue3-notification';
                     Código de tarjeta rival:
                     <input type="text" class="main-input half-wide" v-model="pairingCode" />
                 </label>
-                <button class="main-button medium-top-margin"
-                    :class="{ 'disabled': currentCard?.successfullyPaired }"
+                <button class="main-button medium-top-margin" :class="{ 'disabled': currentCard?.successfullyPaired }"
                     @click="offerPairing">Enviar</button>
             </div>
         </div>
@@ -83,7 +101,6 @@ export default {
     },
     data() {
         return {
-            isMounted: false,
             carouselConfig: {
                 itemsToShow: 1.5,
                 wrapAround: true,
@@ -100,7 +117,9 @@ export default {
                 gameId: null,
                 proposalId: null
             },
-            activeCarouselIndex: 0
+            activeCarouselIndex: 0,
+            currentTime: Date.now(),
+            intervalId: null,
         };
     },
     computed: {
@@ -135,7 +154,14 @@ export default {
         },
         isHost() {
             return this.currentUser?.email === this.gameData?.host;
-        }
+        },
+        gameTimeLeft() {
+            if (!this.gameData?.startedAt || !this.gameData?.gameDuration) return null;
+
+            const start = new Date(this.gameData.startedAt.seconds * 1000);
+            const elapsed = Math.floor((this.currentTime - start.getTime()) / 1000);
+            return Math.max(this.gameData.gameDuration - elapsed, 0);
+        },
     },
     methods: {
         async offerPairing() {
@@ -201,10 +227,21 @@ export default {
         },
     },
     async mounted() {
-        this.isMounted = true;
-        if (!this.gameData) {
+        if (!this.gameData || !this.gamePlayers || this.gamePlayers.length === 0) {
             await store.dispatch('startLobbyListeners', this.gameId);
         }
+
+        this.intervalId = setInterval(() => {
+            this.currentTime = Date.now();
+        }, 1000);
+    },
+    beforeUnmount() {
+        store.dispatch("stopLobbyListeners", {
+            shouldRemovePlayer: !isTransitioningToGame,
+            shouldResetLobby: !isTransitioningToGame
+        });
+
+        if (this.intervalId) clearInterval(this.intervalId);
     }
 };
 </script>
@@ -262,7 +299,7 @@ export default {
     padding: 0 10px;
     border-radius: 10px;
     max-height: 16vh;
-    max-width: 220px;
+    max-width: 250px;
 }
 
 .carousel__slide .card-category {

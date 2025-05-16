@@ -1,6 +1,6 @@
 <script setup>
 import { db } from '../firebase/init.js';
-import { addDoc, collection } from "firebase/firestore";
+import { addDoc, collection, doc, onSnapshot, updateDoc, arrayUnion } from "firebase/firestore";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { notify } from '@kyvg/vue3-notification';
 </script>
@@ -54,8 +54,8 @@ import { notify } from '@kyvg/vue3-notification';
                 </div>
             </div>
             <div class="flex vertical y-centered">
-                <img class="medium-bottom-margin" v-if="uploadingCard" width="32" src="/img/loading.gif" alt="Loading..."
-                    style="background: transparent;" />
+                <img class="medium-bottom-margin" v-if="uploadingCard" width="32" src="/img/loading.gif"
+                    alt="Loading..." style="background: transparent;" />
                 <button type="submit">Crear tarjeta</button>
             </div>
         </form>
@@ -67,6 +67,7 @@ export default {
     name: "CardCreator",
     data() {
         return {
+            cardCodes: [],
             cardData: {
                 category: "",
                 difficulty: "easy",
@@ -80,10 +81,38 @@ export default {
         };
     },
     methods: {
+        async finishUpload() {
+            await addDoc(collection(db, "cards"), this.cardData);
+            await this.addCodes();
+            this.resetForm();
+            notify({
+                title: 'Tarjeta creada',
+                text: 'La tarjeta ha sido creada exitosamente.',
+                type: 'success'
+            });
+            this.uploadingCard = false;
+        },
         async createCard() {
             const that = this;
 
             try {
+                if (this.checkCardCodes() === 'non-compliant') {
+                    notify({
+                        title: 'Error al crear tarjeta',
+                        text: 'Algún código no cumple con el requisito de ser palabra válida de 6 letras.',
+                        type: 'error'
+                    });
+                    return;
+                }
+                else if (this.checkCardCodes() === 'already-used') {
+                    notify({
+                        title: 'Error al crear tarjeta',
+                        text: 'Algún código ya ha sido utilizado para otra tarjeta.',
+                        type: 'error'
+                    });
+                    return;
+                }
+
                 const fileTypes = { image: ".jpg", audio: ".mp3" };
 
                 let optionsProcessed = 0;
@@ -97,14 +126,7 @@ export default {
                                 that.cardData.options[index].content = url;
                                 optionsProcessed++;
                                 if (optionsProcessed === 2) {
-                                    await addDoc(collection(db, "cards"), that.cardData);
-                                    that.resetForm();
-                                    notify({
-                                        title: 'Tarjeta creada',
-                                        text: 'La tarjeta ha sido creada exitosamente.',
-                                        type: 'success'
-                                    });
-                                    that.uploadingCard = false;
+                                    await that.finishUpload();
                                 }
                             });
                         });
@@ -113,14 +135,7 @@ export default {
                         optionsProcessed++;
                         if (optionsProcessed === 2) {
                             this.uploadingCard = true;
-                            await addDoc(collection(db, "cards"), that.cardData);
-                            that.resetForm();
-                            notify({
-                                title: 'Tarjeta creada',
-                                text: 'La tarjeta ha sido creada exitosamente.',
-                                type: 'success'
-                            });
-                            this.uploadingCard = false;
+                            await that.finishUpload();
                         }
                     }
                 }
@@ -128,12 +143,11 @@ export default {
                 console.log(error);
                 return notify({
                     title: 'Error al crear tarjeta',
-                    text: 'Hubo un error al crear la tarjeta. Por favor, inténtalo de nuevo.',
+                    text: 'Hubo un error al crear la tarjeta: ' + error,
                     type: 'error'
                 });
             }
         },
-
         async uploadCardFile(fileName, folder, cardNumber, fileExtension, callback) {
             const storage = getStorage();
             const storageRef = ref(storage, 'cards/' + folder + '/' + fileName + fileExtension);
@@ -168,7 +182,58 @@ export default {
             this.cardData.hint = "";
             this.cardData.options[0] = { cardCode: "", content: "", contentType: "text" };
             this.cardData.options[1] = { cardCode: "", content: "", contentType: "text" };
+        },
+        loadCodes() {
+            const docRef = doc(db, 'codes', 'codes');
+
+            this.unsubscribe = onSnapshot(docRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    this.cardCodes = docSnap.data().cardCodes || [];
+                }
+            }, (error) => {
+                console.error('Error en tiempo real:', error);
+            });
+        },
+        checkCardCodes() {
+            for (const option of this.cardData.options) {
+                const optionWord = option.cardCode.trim().toLowerCase();
+
+                if (optionWord.length !== 6 || !/^[a-záéíóúñüö]{6}$/i.test(optionWord)) {
+                    return 'non-compliant';
+                }
+
+                if (this.cardCodes.includes(optionWord)) {
+                    return 'already-used';
+                }
+            }
+
+            return 'both-compliant';
+        },
+        async addCodes() {
+            this.cardData.options.forEach(option => {
+                const optionWord = option.cardCode.trim().toLowerCase();
+
+                try {
+                    const docRef = doc(db, 'codes', 'codes');
+                    updateDoc(docRef, {
+                        cardCodes: arrayUnion(optionWord)
+                    });
+                    this.cardCodes.push(optionWord);
+                } catch (error) {
+                    return notify({
+                        title: 'Error',
+                        text: 'Hubo un error con los códigos al agregar las tarjetas: ' + error,
+                        type: 'error'
+                    });
+                }
+            });
         }
+    },
+    mounted() {
+        this.loadCodes();
+    },
+    beforeUnmount() {
+        if (this.unsubscribe) this.unsubscribe();
     }
 };
 </script>
