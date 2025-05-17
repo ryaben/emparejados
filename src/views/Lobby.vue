@@ -6,7 +6,7 @@ import AnimateHeight from 'vue-animate-height';
 import { db } from '../firebase/init.js';
 import { doc, setDoc, getDoc, deleteDoc, serverTimestamp, updateDoc } from "firebase/firestore";
 import { notify } from '@kyvg/vue3-notification';
-import emojis from '../assets/emojis.js';
+import emojis from '../assets/appVariables/emojis';
 
 const baseUrl = import.meta.env.VITE_BASE_URL || 'https://emparejados.com.ar';
 </script>

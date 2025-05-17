@@ -300,6 +300,8 @@ export default {
     border-radius: 10px;
     max-height: 16vh;
     max-width: 250px;
+    object-fit: contain;
+    aspect-ratio: 1 / 1;
 }
 
 .carousel__slide .card-category {

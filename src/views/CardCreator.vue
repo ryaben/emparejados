@@ -1,21 +1,36 @@
 <script setup>
+import store from '../store';
 import { db } from '../firebase/init.js';
 import { addDoc, collection, doc, onSnapshot, updateDoc, arrayUnion } from "firebase/firestore";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { notify } from '@kyvg/vue3-notification';
+import admins from '../assets/appVariables/admins.js';
+import categories from '../assets/appVariables/categories.js';
 </script>
 
 <template>
-    <div class="card-creator">
-        <h1>Creador de tarjetas</h1>
+    <h1>Creador de tarjetas</h1>
+    
+    <div v-if="!userIsAdmin" class="flex vertical y-centered">
+        <p>Acceso denegado. Solo los administradores pueden crear tarjetas.</p>
+        <button class="container-button main-button medium-top-margin large-bottom-margin">
+            <router-link to="/" class="block">Volver al menú</router-link>
+        </button>
+    </div>
+
+    <div v-if="userIsAdmin" class="card-creator flex x-centered">
         <form id="cardCreatorForm" @submit.prevent="createCard">
             <div>
                 <label for="category">Categoría:</label>
-                <input type="text" id="category" v-model="cardData.category" />
+                <select name="category" id="category" v-model="cardData.category" required>
+                    <option v-for="(category, i) in categories.sort()" :value="category" :key="i">
+                        {{ category }}
+                    </option>
+                </select>
             </div>
             <div>
                 <label for="difficulty">Dificultad:</label>
-                <select id="difficulty" v-model="cardData.difficulty">
+                <select id="difficulty" v-model="cardData.difficulty" required>
                     <option value="easy">Fácil</option>
                     <option value="normal">Media</option>
                     <option value="hard">Difícil</option>
@@ -29,11 +44,11 @@ import { notify } from '@kyvg/vue3-notification';
                 <div class="card">
                     <h3>Tarjeta 1</h3>
                     <label for="card1-code">Código:</label>
-                    <input type="text" id="card1-code" v-model="cardData.options[0].cardCode" />
+                    <input type="text" id="card1-code" v-model="cardData.options[0].cardCode" required />
                     <label for="card1-content">Contenido:</label>
-                    <input type="text" id="card1-content" v-model="cardData.options[0].content" />
+                    <input type="text" id="card1-content" v-model="cardData.options[0].content" required />
                     <label for="card1-type">Tipo de contenido:</label>
-                    <select id="card1-type" v-model="cardData.options[0].contentType">
+                    <select id="card1-type" v-model="cardData.options[0].contentType" required>
                         <option value="text">Texto</option>
                         <option value="image">Imagen</option>
                         <option value="audio">Audio</option>
@@ -42,11 +57,11 @@ import { notify } from '@kyvg/vue3-notification';
                 <div class="card">
                     <h3>Tarjeta 2</h3>
                     <label for="card2-code">Código:</label>
-                    <input type="text" id="card2-code" v-model="cardData.options[1].cardCode" />
+                    <input type="text" id="card2-code" v-model="cardData.options[1].cardCode" required />
                     <label for="card2-content">Contenido:</label>
-                    <input type="text" id="card2-content" v-model="cardData.options[1].content" />
+                    <input type="text" id="card2-content" v-model="cardData.options[1].content" required />
                     <label for="card2-type">Tipo de contenido:</label>
-                    <select id="card2-type" v-model="cardData.options[1].contentType">
+                    <select id="card2-type" v-model="cardData.options[1].contentType" required>
                         <option value="text">Texto</option>
                         <option value="image">Imagen</option>
                         <option value="audio">Audio</option>
@@ -69,7 +84,7 @@ export default {
         return {
             cardCodes: [],
             cardData: {
-                category: "",
+                category: categories[0],
                 difficulty: "easy",
                 hint: "",
                 options: [
@@ -79,6 +94,14 @@ export default {
             },
             uploadingCard: false,
         };
+    },
+    computed: {
+        currentUser() {
+            return store.getters.currentUser;
+        },
+        userIsAdmin() {
+            return admins.includes(this.currentUser.uid);
+        }
     },
     methods: {
         async finishUpload() {
@@ -141,6 +164,7 @@ export default {
                 }
             } catch (error) {
                 console.log(error);
+                this.uploadingCard = false;
                 return notify({
                     title: 'Error al crear tarjeta',
                     text: 'Hubo un error al crear la tarjeta: ' + error,
@@ -177,7 +201,7 @@ export default {
                 });
         },
         resetForm() {
-            this.cardData.category = "";
+            this.cardData.category = categories[0];
             this.cardData.difficulty = "easy";
             this.cardData.hint = "";
             this.cardData.options[0] = { cardCode: "", content: "", contentType: "text" };
@@ -240,7 +264,6 @@ export default {
 
 <style scoped>
 .card-creator {
-    text-align: center;
     padding: 20px;
     font-family: Arial, sans-serif;
 }
@@ -250,6 +273,7 @@ export default {
 }
 
 .card-creator form {
+    text-align: center;
     max-width: 600px;
     margin: 0 auto;
     background-color: #f9f9f9;
