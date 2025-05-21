@@ -38,11 +38,11 @@ import { notify } from '@kyvg/vue3-notification';
                 <Slide class="medium-left-margin medium-right-margin" v-for="card in cardsList.filter(c => c.isVisible)"
                     :key="card.id" :class="{ 'paired': card.successfullyPaired }">
                     <div class="carousel__item flex vertical space-between wide tall">
-                        <h3 class="card-category small-top-margin large-bottom-margin">{{ card.category }}</h3>
+                        <h3 class="card-category small-top-margin medium-bottom-margin">{{ card.category }}</h3>
                         <p class="card-text" v-if="card.contentType === 'text'">{{ card.content }}</p>
                         <img class="card-image wide tall" v-if="card.contentType === 'image'" width="256"
                             :src="card.content" alt="Card Image" />
-                        <p class="card-code large-top-margin small-bottom-margin">Código: <span class="bold">{{
+                        <p class="card-code medium-top-margin small-bottom-margin">Código: <span class="bold">{{
                             card.cardCode }}</span></p>
                     </div>
                 </Slide>
@@ -298,8 +298,7 @@ export default {
     margin: auto;
     padding: 0 10px;
     border-radius: 10px;
-    max-height: 16vh;
-    max-width: 250px;
+    max-height: 60%;
     object-fit: contain;
     aspect-ratio: 1 / 1;
 }
